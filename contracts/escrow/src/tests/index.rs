@@ -340,3 +340,62 @@ fn test_get_player_matches_returns_ids() {
     assert_eq!(player1_matches.get(1).unwrap(), match_id_2);
     assert_eq!(player1_matches.get(2).unwrap(), match_id_3);
 }
+
+#[test]
+fn test_get_player_matches_includes_all_lifecycle_states() {
+    let (env, contract_id, _oracle, player1, player2, token, _admin) = setup();
+    let client = EscrowContractClient::new(&env, &contract_id);
+
+    // Pending
+    let pending_id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "m_pending"),
+        &Platform::Lichess,
+    );
+
+    // Active
+    let active_id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "m_active"),
+        &Platform::Lichess,
+    );
+    client.deposit(&active_id, &player1);
+    client.deposit(&active_id, &player2);
+
+    // Completed
+    let completed_id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "m_completed"),
+        &Platform::Lichess,
+    );
+    client.deposit(&completed_id, &player1);
+    client.deposit(&completed_id, &player2);
+    client.submit_result(&completed_id, &Winner::Player1);
+    client.claim_vested_payout(&completed_id, &player1);
+
+    // Cancelled
+    let cancelled_id = client.create_match(
+        &player1,
+        &player2,
+        &100,
+        &token,
+        &String::from_str(&env, "m_cancelled"),
+        &Platform::Lichess,
+    );
+    client.cancel_match(&cancelled_id, &player1);
+
+    let player_matches = client.get_player_matches(&player1);
+    assert!(player_matches.iter().any(|id| id == pending_id));
+    assert!(player_matches.iter().any(|id| id == active_id));
+    assert!(player_matches.iter().any(|id| id == completed_id));
+    assert!(player_matches.iter().any(|id| id == cancelled_id));
+}
